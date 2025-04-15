@@ -12,7 +12,6 @@ from flask_socketio import SocketIO, emit
 import threading
 import time
 import logging
-from scipy import signal
 import sounddevice as sd
 import requests
 
