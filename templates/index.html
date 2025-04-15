@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Audio Monitoring</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #4285f4;
+            --danger-color: #ea4335;
+            --success-color: #34a853;
+            --warning-color: #fbbc05;
+            --dark-color: #202124;
+            --light-color: #f8f9fa;
+            --border-color: #dadce0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #f5f5f5;
+            color: var(--dark-color);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            font-weight: 500;
+            margin-bottom: 5px;
+        }
+
+        .subtitle {
+            color: #5f6368;
+            font-weight: 300;
+        }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+
+        .control-panel {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            padding: 20px;
+            height: fit-content;
+        }
+
+        .panel-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--primary-color);
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #3c4043;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .status-container {
+            display: flex;
+            align-items: center;
+            margin-left: auto;
+        }
+
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 6px;
+            flex-shrink: 0;
+        }
+
+        .status-off {
+            background-color: #ccc;
+        }
+
+        .status-on {
+            background-color: var(--success-color);
+            box-shadow: 0 0 5px var(--success-color);
+        }
+
+        .status-text {
+            white-space: nowrap;
+            font-size: 14px;
+        }
+
+        select, input[type="number"], input[type="text"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-family: inherit;
+            font-size: 14px;
+        }
+
+        input[type="range"] {
+            flex-grow: 1;
+        }
+
+        .range-value {
+            min-width: 40px;
+            text-align: right;
+            font-family: monospace;
+        }
+
+        button {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 4px;
+            font-family: inherit;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-danger {
+            background-color: var(--danger-color);
+            color: white;
+        }
+
+        .btn-block {
+            display: block;
+            width: 100%;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+        }
+
+        .checkbox-container input {
+            width: auto;
+            margin-right: 8px;
+        }
+
+        .visualization {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+
+        #waterfall-container {
+            position: relative;
+            height: 500px;
+            background-color: transparent;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        #waterfall {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background-color: transparent;
+        }
+
+        .status-display {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 4px;
+            background-color: #e8f0fe;
+            color: var(--primary-color);
+        }
+
+        .status-error {
+            background-color: #fce8e6;
+            color: var(--danger-color);
+        }
+
+        .status-warning {
+            background-color: #fff7e0;
+            color: #e37400;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .tabs {
+            display: flex;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab.active {
+            border-bottom: 2px solid var(--primary-color);
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+
+            .control-panel {
+                order: 2;
+            }
+
+            .visualization {
+                order: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SAAO IO Live Audio Monitoring</h1>
+            <p class="subtitle">Real-time Audio Waterfall Analyzer</p>
+        </header>
+
+        <div class="dashboard">
+            <div class="control-panel">
+                <div class="tabs">
+                    <div class="tab active" data-tab="controls">Controls</div>
+                    <div class="tab" data-tab="settings">Settings</div>
+                </div>
+
+                <div class="tab-content active" id="controls-tab">
+                    <div class="control-group">
+                        <div class="control-row">
+                            <button id="startBtn" class="btn-primary">Start</button>
+                            <button id="stopBtn" class="btn-danger">Stop</button>
+                            <div class="status-container">
+                                <span class="status-indicator status-off"></span>
+                                <span class="status-text">Not running</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="audioPlayback">Audio Playback</label>
+                        <div class="checkbox-container">
+                            <input type="checkbox" id="audioPlayback">
+                            <label for="audioPlayback">Enable live audio playback</label>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="fftSize">FFT Window Size</label>
+                        <select id="fftSize">
+                            <option value="512">512 points</option>
+                            <option value="1024" selected>1024 points</option>
+                            <option value="2048">2048 points</option>
+                            <option value="4096">4096 points</option>
+                            <option value="8192">8192 points</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="colorScheme">Color Scheme</label>
+                        <select id="colorScheme">
+                            <option value="viridis" selected>Viridis</option>
+                            <option value="plasma">Plasma</option>
+                            <option value="inferno">Inferno</option>
+                            <option value="magma">Magma</option>
+                            <option value="cividis">Cividis</option>
+                            <option value="hot">Hot</option>
+                            <option value="cool">Cool</option>
+                            <option value="jet">Jet</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="contrast">Contrast: <span id="contrastValue">1.0</span></label>
+                        <input type="range" id="contrast" min="0.1" max="2.0" step="0.1" value="1.0">
+                    </div>
+                </div>
+
+                <div class="tab-content" id="settings-tab">
+                    <div class="control-group">
+                        <label>Frequency Range (Hz)</label>
+                        <div class="control-row">
+                            <input type="number" id="minFreq" min="0" max="23900" step="100" value="0" placeholder="Min">
+                            <span style="margin: 0 5px;">to</span>
+                            <input type="number" id="maxFreq" min="100" max="24000" step="100" value="24000" placeholder="Max">
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label for="maxTime">Time Window: <span id="maxTimeValue">10</span>s</label>
+                        <input type="range" id="maxTime" min="1" max="30" step="1" value="10">
+                    </div>
+
+                    <div class="control-group">
+                        <label for="refreshRate">Refresh Rate: <span id="refreshRateValue">0.1</span>s</label>
+                        <input type="range" id="refreshRate" min="0.05" max="0.5" step="0.05" value="0.1">
+                    </div>
+
+                    <div class="control-group">
+                        <label for="streamUrl">Stream URL</label>
+                        <input type="text" id="streamUrl" placeholder="http://192.168.68.54:5000/audio.raw">
+                    </div>
+
+                    <div class="control-group">
+                        <label for="sampleRate">Sample Rate</label>
+                        <input type="number" id="sampleRate" placeholder="48000">
+                    </div>
+
+                    <button id="reloadConfig" class="btn-primary btn-block">Update Configuration</button>
+                    <div id="configStatus" style="margin-top: 10px; font-size: 13px;"></div>
+                </div>
+            </div>
+
+            <div class="visualization">
+                <div id="waterfall-container">
+                    <img id="waterfall" src="" alt="Live Waterfall Display">
+                </div>
+
+                <div id="statusDisplay" class="status-display">
+                    System ready. Click Start to begin monitoring.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Connect to SocketIO
+        const socket = io();
+
+        // DOM elements
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const statusContainer = document.querySelector('.status-container');
+        const statusIndicator = statusContainer.querySelector('.status-indicator');
+        const statusText = statusContainer.querySelector('.status-text');
+        const waterfallImg = document.getElementById('waterfall');
+        const statusDisplay = document.getElementById('statusDisplay');
+
+        // Controls
+        const fftSizeSelect = document.getElementById('fftSize');
+        const colorSchemeSelect = document.getElementById('colorScheme');
+        const contrastSlider = document.getElementById('contrast');
+        const contrastValue = document.getElementById('contrastValue');
+        const audioPlaybackCheckbox = document.getElementById('audioPlayback');
+
+        // Settings
+        const minFreqInput = document.getElementById('minFreq');
+        const maxFreqInput = document.getElementById('maxFreq');
+        const maxTimeSlider = document.getElementById('maxTime');
+        const maxTimeValue = document.getElementById('maxTimeValue');
+        const refreshRateSlider = document.getElementById('refreshRate');
+        const refreshRateValue = document.getElementById('refreshRateValue');
+        const streamUrlInput = document.getElementById('streamUrl');
+        const sampleRateInput = document.getElementById('sampleRate');
+        const reloadConfigBtn = document.getElementById('reloadConfig');
+        const configStatus = document.getElementById('configStatus');
+
+        // Tabs
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        // Load initial configuration
+        function loadConfiguration() {
+            fetch('/get_config')
+                .then(response => response.json())
+                .then(config => {
+                    // Audio stream settings
+                    streamUrlInput.value = config.audio_stream.url;
+                    sampleRateInput.value = config.audio_stream.sample_rate;
+
+                    // Waterfall settings
+                    fftSizeSelect.value = config.waterfall.fft_window_size;
+                    colorSchemeSelect.value = config.waterfall.color_scheme;
+                    contrastSlider.value = config.waterfall.contrast;
+                    contrastValue.textContent = config.waterfall.contrast;
+                    minFreqInput.value = config.waterfall.min_freq;
+                    maxFreqInput.value = config.waterfall.max_freq;
+
+                    // Display settings
+                    maxTimeSlider.value = config.display.current_time_window;
+                    maxTimeValue.textContent = config.display.current_time_window;
+                    refreshRateSlider.value = config.display.current_refresh_rate;
+                    refreshRateValue.textContent = config.display.current_refresh_rate;
+                });
+        }
+
+        // Tab switching
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+
+                tab.classList.add('active');
+                document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+            });
+        });
+
+        // Update waterfall image
+        socket.on('waterfall_update', function(data) {
+            waterfallImg.src = 'data:image/png;base64,' + data.image;
+        });
+
+        // Handle system status updates
+        socket.on('status', function(data) {
+            statusDisplay.textContent = data.data;
+            statusDisplay.className = 'status-display';
+        });
+
+        // Handle anomalies
+        socket.on('anomalies_detected', function(data) {
+            const anomalies = data.anomalies;
+            let statusText = '';
+
+            if (anomalies.length > 0) {
+                statusDisplay.className = 'status-display status-error';
+                statusText = '⚠️ Anomalies detected: ';
+
+                anomalies.forEach((anomaly, index) => {
+                    if (index > 0) statusText += ', ';
+                    statusText += `${anomaly.type} at ${new Date(anomaly.time * 1000).toLocaleTimeString()}`;
+                });
+            } else {
+                statusDisplay.className = 'status-display status-warning';
+                statusText = 'System normal - no anomalies detected';
+            }
+
+            statusDisplay.textContent = statusText;
+        });
+
+        // Button event listeners
+        startBtn.addEventListener('click', function() {
+            fetch('/start_stream', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    statusIndicator.className = 'status-indicator status-on';
+                    statusText.textContent = 'Running';
+                    statusDisplay.className = 'status-display';
+                    statusDisplay.textContent = 'Stream started - monitoring audio...';
+                });
+        });
+
+        stopBtn.addEventListener('click', function() {
+            fetch('/stop_stream', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    statusIndicator.className = 'status-indicator status-off';
+                    statusText.textContent = 'Stopped';
+                    statusDisplay.className = 'status-display';
+                    statusDisplay.textContent = 'Stream stopped. Click Start to resume.';
+                });
+        });
+
+        // Settings update handlers
+        function updateSettings() {
+            const settings = {
+                fft_window_size: fftSizeSelect.value,
+                color_scheme: colorSchemeSelect.value,
+                contrast: contrastSlider.value,
+                audio_playback_enabled: audioPlaybackCheckbox.checked,
+                min_freq: minFreqInput.value,
+                max_freq: maxFreqInput.value
+            };
+
+            fetch('/update_settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            });
+        }
+
+        // Timing controls
+        function updateTimingSettings() {
+            const settings = {
+                max_time: parseFloat(maxTimeSlider.value),
+                refresh_rate: parseFloat(refreshRateSlider.value)
+            };
+
+            fetch('/update_timing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settings)
+            });
+        }
+
+        // Frequency range validation
+        function validateFrequencyRange() {
+            const minFreq = parseInt(minFreqInput.value);
+            const maxFreq = parseInt(maxFreqInput.value);
+
+            if (minFreq >= maxFreq) {
+                maxFreqInput.value = minFreq + 100;
+            }
+            updateSettings();
+        }
+
+        // Configuration update
+        reloadConfigBtn.addEventListener('click', function() {
+            const newConfig = {
+                url: streamUrlInput.value,
+                sample_rate: parseInt(sampleRateInput.value)
+            };
+
+            fetch('/update_config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newConfig)
+            }).then(response => response.json())
+              .then(data => {
+                  configStatus.textContent = data.message;
+                  configStatus.style.color = 'var(--success-color)';
+              })
+              .catch(error => {
+                  configStatus.textContent = 'Error updating configuration';
+                  configStatus.style.color = 'var(--danger-color)';
+              });
+        });
+
+        // Event listeners
+        fftSizeSelect.addEventListener('change', updateSettings);
+        colorSchemeSelect.addEventListener('change', updateSettings);
+        contrastSlider.addEventListener('input', function() {
+            contrastValue.textContent = this.value;
+            updateSettings();
+        });
+        audioPlaybackCheckbox.addEventListener('change', updateSettings);
+        minFreqInput.addEventListener('change', validateFrequencyRange);
+        maxFreqInput.addEventListener('change', validateFrequencyRange);
+        maxTimeSlider.addEventListener('input', function() {
+            maxTimeValue.textContent = this.value;
+            updateTimingSettings();
+        });
+        refreshRateSlider.addEventListener('input', function() {
+            refreshRateValue.textContent = this.value;
+            updateTimingSettings();
+        });
+
+        // Initialize
+        window.addEventListener('load', loadConfiguration);
+    </script>
+</body>
+</html>
